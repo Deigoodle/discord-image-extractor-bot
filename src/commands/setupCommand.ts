@@ -1,5 +1,5 @@
 import { Interaction, ChannelType } from "discord.js";
-import { monitoredChannels } from "@/state/monitoredChannels";
+import { monitoredChannels, saveState } from "@/state/monitoredChannels";
 
 export async function setupCommand(interaction: Interaction, guildId: string | null) {
     if (!interaction.isChatInputCommand()) return;
@@ -37,6 +37,7 @@ export async function setupCommand(interaction: Interaction, guildId: string | n
     }
     
     channels.add(channel.id);
+    saveState();
   
     await interaction.reply({
       content: `✅ Successfully added <#${channel.id}> to monitoring! (${channels.size} channel${channels.size > 1 ? 's' : ''} total)`,

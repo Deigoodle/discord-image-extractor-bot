@@ -1,5 +1,5 @@
 import { Interaction, ChannelType } from "discord.js";
-import { monitoredChannels } from "@/state/monitoredChannels";
+import { monitoredChannels, saveState } from "@/state/monitoredChannels";
 
 export async function removeCommand(interaction: Interaction, guildId: string | null) {
     if (!interaction.isChatInputCommand()) return;
@@ -37,6 +37,7 @@ export async function removeCommand(interaction: Interaction, guildId: string | 
     if (channels.size === 0) {
       monitoredChannels.delete(guildId);
     }
+    saveState(); // Save the state to the data file
   
     await interaction.reply({
       content: `✅ Removed <#${channel.id}> from monitoring. (${channels.size} channel${channels.size !== 1 ? 's' : ''} remaining)`,

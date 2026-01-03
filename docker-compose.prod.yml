@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile.prod
     container_name: discord-image-extractor-bot
     restart: unless-stopped
+    volumes:
+      - ./data:/app/data
     env_file:
       - .env
     environment:

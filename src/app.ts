@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { handleReady } from '@/handlers/handleReady';
 import { handleInteraction } from '@/handlers/handleInteracion';
 import { handleMessage } from '@/handlers/handleMessage';
+import { loadState } from '@/state/monitoredChannels';
 
 const client = new Client({
   intents: [
@@ -16,4 +17,5 @@ client.once(Events.ClientReady, handleReady);
 client.on(Events.InteractionCreate, handleInteraction);
 client.on(Events.MessageCreate, handleMessage);
 
+loadState(); // Load the state from data file
 client.login(process.env.DISCORD_TOKEN);
