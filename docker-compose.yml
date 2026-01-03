@@ -1,0 +1,14 @@
+services:
+  bot:
+    build: .
+    container_name: discord-image-extractor-bot
+    restart: unless-stopped
+    network_mode: "host"
+    volumes:
+      - ./src:/app/src
+      - ./tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
