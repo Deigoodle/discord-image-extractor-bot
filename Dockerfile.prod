@@ -20,4 +20,6 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
+RUN mkdir -p data
+
 CMD ["node", "dist/app.js"]

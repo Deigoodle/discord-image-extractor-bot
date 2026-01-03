@@ -1,4 +1,4 @@
-import { Interaction, ChannelType } from "discord.js";
+import { Interaction, ChannelType, MessageFlags } from "discord.js";
 import { monitoredChannels, saveState } from "@/state/monitoredChannels";
 
 export async function setupCommand(interaction: Interaction, guildId: string | null) {
@@ -9,7 +9,7 @@ export async function setupCommand(interaction: Interaction, guildId: string | n
     if (channel.type !== ChannelType.GuildText) {
       await interaction.reply({
         content: '❌ Please select a text channel.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -17,7 +17,7 @@ export async function setupCommand(interaction: Interaction, guildId: string | n
     if (!guildId) {
       await interaction.reply({
         content: '❌ This command can only be used in a server.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -31,7 +31,7 @@ export async function setupCommand(interaction: Interaction, guildId: string | n
     if (channels.has(channel.id)) {
       await interaction.reply({
         content: `ℹ️ <#${channel.id}> is already being monitored.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -41,7 +41,7 @@ export async function setupCommand(interaction: Interaction, guildId: string | n
   
     await interaction.reply({
       content: `✅ Successfully added <#${channel.id}> to monitoring! (${channels.size} channel${channels.size > 1 ? 's' : ''} total)`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   
     console.log(`📝 Added channel ${channel.name} (${channel.id}) in guild ${guildId}. Total: ${channels.size}`);

@@ -8,4 +8,6 @@ RUN npm ci
 
 COPY . .
 
+RUN mkdir -p data
+
 CMD ["npm", "run", "dev"]

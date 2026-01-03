@@ -9,6 +9,7 @@ services:
       - ./tsconfig.json:/app/tsconfig.json
       - /app/node_modules
       - ./data:/app/data
+      - ./google-credentials.json:/app/google-credentials.json
     env_file:
       - .env
     environment:

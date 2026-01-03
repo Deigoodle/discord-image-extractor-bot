@@ -1,4 +1,4 @@
-import { Interaction } from "discord.js";
+import { Interaction, MessageFlags } from "discord.js";
 import { monitoredChannels } from "@/state/monitoredChannels";
 
 export async function statusCommand(interaction: Interaction, guildId: string | null) {
@@ -7,7 +7,7 @@ export async function statusCommand(interaction: Interaction, guildId: string | 
     if (!guildId) {
       await interaction.reply({
         content: '❌ This command can only be used in a server.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -17,7 +17,7 @@ export async function statusCommand(interaction: Interaction, guildId: string | 
     if (!channels || channels.size === 0) {
       await interaction.reply({
         content: '❌ No channels are currently being monitored. Use `/setup` to add a channel.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -28,6 +28,6 @@ export async function statusCommand(interaction: Interaction, guildId: string | 
   
     await interaction.reply({
       content: `📊 Currently monitoring ${channels.size} channel${channels.size > 1 ? 's' : ''}:\n${channelList}`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
