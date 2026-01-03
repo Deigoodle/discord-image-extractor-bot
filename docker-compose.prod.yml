@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/app/data
-      - ./google-credentials.json:/app/google-credentials.json
+      - ./oauth-credentials.json:/app/oauth-credentials.json
       - ./logs:/app/logs
     env_file:
       - .env
