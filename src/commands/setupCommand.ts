@@ -1,5 +1,8 @@
 import { Interaction, ChannelType, MessageFlags } from "discord.js";
 import { monitoredChannels, saveState } from "@/state/monitoredChannels";
+import { createLogger } from "@/services/logger";
+
+const logger = createLogger('setupCommand');
 
 export async function setupCommand(interaction: Interaction, guildId: string | null) {
     if (!interaction.isChatInputCommand()) return;
@@ -44,5 +47,5 @@ export async function setupCommand(interaction: Interaction, guildId: string | n
       flags: MessageFlags.Ephemeral,
     });
   
-    console.log(`📝 Added channel ${channel.name} (${channel.id}) in guild ${guildId}. Total: ${channels.size}`);
+    logger.info(`Added channel ${channel.name} (${channel.id}) in guild ${guildId}. Total: ${channels.size}`);
   }

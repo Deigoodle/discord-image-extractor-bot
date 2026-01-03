@@ -1,5 +1,8 @@
+import { createLogger } from '@/services/logger';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+
+const logger = createLogger('monitoredChannels');
 
 const DATA_FILE = join(process.cwd(), 'data', 'monitored-channels.json');
 
@@ -16,10 +19,10 @@ export function loadState() {
         monitoredChannels.set(guildId, new Set(channelIds as string[]));
       });
       
-      console.log('📂 Loaded monitored channels from file');
+      logger.info(`Loaded monitored channels from file: ${DATA_FILE}`);
     }
   } catch (error) {
-    console.error('❌ Error loading state:', error);
+    logger.error('Error loading state:', error);
   }
 }
 
@@ -33,7 +36,8 @@ export function saveState() {
     });
     
     writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    logger.info(`Saved monitored channels to file: ${DATA_FILE}`);
   } catch (error) {
-    console.error('❌ Error saving state:', error);
+    logger.error('Error saving state:', error);
   }
 }

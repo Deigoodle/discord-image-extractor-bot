@@ -1,5 +1,8 @@
 import { Interaction, ChannelType, MessageFlags } from "discord.js";
 import { monitoredChannels, saveState } from "@/state/monitoredChannels";
+import { createLogger } from "@/services/logger";
+
+const logger = createLogger('removeCommand');
 
 export async function removeCommand(interaction: Interaction, guildId: string | null) {
     if (!interaction.isChatInputCommand()) return;
@@ -44,5 +47,5 @@ export async function removeCommand(interaction: Interaction, guildId: string | 
       flags: MessageFlags.Ephemeral,
     });
   
-    console.log(`🗑️  Removed channel ${channel.name} (${channel.id}) from guild ${guildId}. Remaining: ${channels.size}`);
+    logger.info(`Removed channel ${channel.name} (${channel.id}) from guild ${guildId}. Remaining: ${channels.size}`);
   }

@@ -8,6 +8,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./google-credentials.json:/app/google-credentials.json
+      - ./logs:/app/logs
     env_file:
       - .env
     environment:

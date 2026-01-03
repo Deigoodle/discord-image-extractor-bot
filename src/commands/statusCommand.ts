@@ -1,5 +1,8 @@
 import { Interaction, MessageFlags } from "discord.js";
 import { monitoredChannels } from "@/state/monitoredChannels";
+import { createLogger } from "@/services/logger";
+
+const logger = createLogger('statusCommand');
 
 export async function statusCommand(interaction: Interaction, guildId: string | null) {
     if (!interaction.isChatInputCommand()) return;

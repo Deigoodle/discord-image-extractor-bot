@@ -1,6 +1,8 @@
 import { google } from 'googleapis';
 import { readFileSync } from 'fs';
-import path from 'path';
+import { createLogger } from "@/services/logger";
+
+const logger = createLogger('googleDriveService');
 
 const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 
@@ -18,9 +20,9 @@ class GoogleDriveService {
       });
 
       this.driveClient = google.drive({ version: 'v3', auth });
-      console.log('✅ Google Drive initialized');
+      logger.info('Google Drive initialized');
     } catch (error) {
-      console.error('❌ Error initializing Google Drive:', error);
+      logger.error('Error initializing Google Drive:', error);
       throw error;
     }
   }
@@ -43,7 +45,7 @@ class GoogleDriveService {
 
     // Return existing folder if found
     if (response.data.files && response.data.files.length > 0) {
-      console.log(`📁 Found existing folder: ${folderName}`);
+      logger.info(`Found existing folder: ${folderName}`);
       return response.data.files[0].id!;
     }
 
@@ -59,7 +61,7 @@ class GoogleDriveService {
       fields: 'id',
     });
 
-    console.log(`📁 Created new folder: ${folderName}`);
+    logger.info(`Created new folder: ${folderName}`);
     return folder.data.id!;
   }
 

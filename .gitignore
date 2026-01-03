@@ -3,3 +3,5 @@ node_modules
 data/*
 !data/.gitkeep
 google-credentials.json
+logs/*
+!logs/.gitkeep
