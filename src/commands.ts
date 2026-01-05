@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { InstallGlobalCommands } from '@/utils';
+import { InstallGlobalCommands } from '@/utils/discordUtils';
 
 /**
  * Command Types:
@@ -49,6 +49,36 @@ const STATUS_COMMAND = {
   type: 1,
 };
 
-const ALL_COMMANDS = [SETUP_COMMAND, REMOVE_COMMAND, STATUS_COMMAND];
+const SYNC_COMMAND = {
+  name: 'sync',
+  description: 'Upload all images from message history in this channel',
+  type: 1,
+  options: [
+    {
+      type: 4, // INTEGER
+      name: 'days',
+      description: 'Number of days back to sync (e.g., 30 for last 30 days)',
+      required: false,
+      min_value: 1,
+      max_value: 365,
+    },
+    {
+      type: 3, // STRING
+      name: 'since',
+      description: 'Sync messages since this date (format: YYYY-MM-DD, e.g., 2024-01-01)',
+      required: false,
+    },
+    {
+      type: 4, // INTEGER
+      name: 'limit',
+      description: 'Max number of messages to check (overrides date filters)',
+      required: false,
+      min_value: 1,
+      max_value: 1000,
+    }
+  ]
+};
+
+const ALL_COMMANDS = [SETUP_COMMAND, REMOVE_COMMAND, STATUS_COMMAND, SYNC_COMMAND];
 
 InstallGlobalCommands(process.env.APP_ID!, ALL_COMMANDS as any);

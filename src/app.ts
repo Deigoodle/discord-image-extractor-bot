@@ -7,6 +7,7 @@ import { handleMessage } from '@/handlers/handleMessage';
 import { loadState } from '@/state/monitoredChannels';
 import { googleDriveService } from '@/services/googleDriveService';
 import { createLogger } from '@/services/logger';
+import { loadSyncedMessages } from './state/syncedMessages';
 
 const logger = createLogger('app');
 
@@ -27,6 +28,7 @@ client.on(Events.MessageCreate, handleMessage);
 async function start() {
   try {
     loadState();
+    loadSyncedMessages(); // Add this
     await googleDriveService.initialize();
     await client.login(process.env.DISCORD_TOKEN);
   } catch (error) {

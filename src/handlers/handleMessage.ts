@@ -5,6 +5,7 @@ import { extractImages } from "@/utils/messageUtils";
 import { downloadImage, getFileNameFromUrl, getMimeTypeFromUrl } from "@/utils/imageUtils";
 import { googleDriveService } from "@/services/googleDriveService";
 import { createLogger } from "@/services/logger";
+import { markMessageSynced, saveSyncedMessages } from "@/state/syncedMessages";
 
 const logger = createLogger('MessageHandler');
 
@@ -82,6 +83,9 @@ export async function handleMessage(message: Message) {
     // React to show success
     await message.react('✅');
     logger.debug('Added success reaction');
+
+    markMessageSynced(message.channelId, message.id);
+    saveSyncedMessages();
     
   } catch (error) {
     logger.error('Error processing images', error);

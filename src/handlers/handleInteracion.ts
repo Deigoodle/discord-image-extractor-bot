@@ -3,6 +3,7 @@ import { setupCommand } from "@/commands/setupCommand";
 import { removeCommand } from "@/commands/removeCommand";
 import { statusCommand } from "@/commands/statusCommand";
 import { createLogger } from "@/services/logger";
+import { syncCommand } from "@/commands/syncCommand";
 
 const logger = createLogger('handleInteraction');
 
@@ -21,5 +22,9 @@ export async function handleInteraction(interaction: Interaction) {
   
     if (commandName === 'status') {
       await statusCommand(interaction, guildId);
+    }
+
+    if (commandName === 'sync') {
+      await syncCommand(interaction, guildId);
     }
   }

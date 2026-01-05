@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: discord-image-extractor-bot
     restart: unless-stopped
+    network_mode: "host"
     volumes:
       - ./data:/app/data
       - ./oauth-credentials.json:/app/oauth-credentials.json
