@@ -26,6 +26,7 @@
   "homepage": "https://github.com/Deigoodle/discord-image-extractor-bot#readme",
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
+    "axios": "^1.13.2",
     "discord.js": "^14.25.1",
     "dotenv": "^16.0.3",
     "googleapis": "^169.0.0",

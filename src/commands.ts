@@ -79,6 +79,12 @@ const SYNC_COMMAND = {
   ]
 };
 
-const ALL_COMMANDS = [SETUP_COMMAND, REMOVE_COMMAND, STATUS_COMMAND, SYNC_COMMAND];
+const TEST_COMMAND = {
+  name: 'test',
+  description: 'Test Google Photos API connection',
+  type: 1,
+};
+
+const ALL_COMMANDS = [SETUP_COMMAND, REMOVE_COMMAND, STATUS_COMMAND, SYNC_COMMAND, TEST_COMMAND];
 
 InstallGlobalCommands(process.env.APP_ID!, ALL_COMMANDS as any);

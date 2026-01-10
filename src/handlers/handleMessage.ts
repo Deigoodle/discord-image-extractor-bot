@@ -3,7 +3,7 @@ import { Message } from "discord.js";
 import { monitoredChannels } from "@/state/monitoredChannels";
 import { extractImages } from "@/utils/messageUtils";
 import { downloadImage, getFileNameFromUrl, getMimeTypeFromUrl } from "@/utils/imageUtils";
-import { googleDriveService } from "@/services/googleDriveService";
+import { googlePhotosService } from "@/services/googlePhotosService";
 import { createLogger } from "@/services/logger";
 import { markMessageSynced, saveSyncedMessages } from "@/state/syncedMessages";
 
@@ -50,17 +50,14 @@ export async function handleMessage(message: Message) {
   logger.info(`Found ${images.length} image(s) in message ${message.id}`);
   
   try {
-    // Get channel name for folder
+    // Get channel name for album
     const channel = message.channel;
     const channelName = ('name' in channel && channel.name) ? channel.name : message.channelId;
-    logger.debug(`Channel name for folder: ${channelName}`);
+    logger.debug(`Channel name for album: ${channelName}`);
     
-    // Find or create folder for this channel
-    const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-    logger.debug(`Root folder ID: ${rootFolderId || 'not set'}`);
-    
-    const channelFolderId = await googleDriveService.findOrCreateFolder(channelName, rootFolderId || 'root');
-    logger.debug(`Channel folder ID: ${channelFolderId}`);
+    // Find or create album for this channel
+    const albumId = await googlePhotosService.findOrCreateAlbum(channelName);
+    logger.debug(`Album ID: ${albumId}`);
     
     // Upload each image
     for (let i = 0; i < images.length; i++) {
@@ -74,10 +71,10 @@ export async function handleMessage(message: Message) {
       const mimeType = getMimeTypeFromUrl(imageUrl);
       logger.debug(`File: ${fileName}, MIME: ${mimeType}`);
       
-      logger.info(`Uploading to Google Drive: ${fileName}`);
-      const driveLink = await googleDriveService.uploadImage(imageBuffer, fileName, channelFolderId, mimeType);
+      logger.info(`Uploading to Google Photos: ${fileName}`);
+      const photoLink = await googlePhotosService.uploadImage(imageBuffer, fileName, albumId, mimeType);
       
-      logger.info(`Successfully uploaded: ${driveLink}`);
+      logger.info(`Successfully uploaded: ${photoLink}`);
     }
     
     // React to show success

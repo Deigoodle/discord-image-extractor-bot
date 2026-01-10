@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction, ChannelType, TextChannel, MessageFlags, Message } from "discord.js";
 import { extractImages } from "@/utils/messageUtils";
 import { downloadImage, getFileNameFromUrl, getMimeTypeFromUrl } from "@/utils/imageUtils";
-import { googleDriveService } from "@/services/googleDriveService";
+import { googlePhotosService } from "@/services/googlePhotosService";
 import { createLogger } from "@/services/logger";
 import { isMessageSynced, markMessageSynced, saveSyncedMessages } from '@/state/syncedMessages';
 
@@ -59,6 +59,17 @@ export async function syncCommand(interaction: ChatInputCommandInteraction, guil
     logger.info(`Starting sync for channel ${channel.name}, filter: ${filterDescription}`);
 
     try {
+        // STEP 0: Test Google Photos API connection first
+        await interaction.editReply(`🔍 Testing Google Photos API connection...`);
+        logger.info('Testing Google Photos API before sync...');
+        
+        const apiWorking = await googlePhotosService.testConnection();
+        if (!apiWorking) {
+            await interaction.editReply('❌ Google Photos API test failed. Check logs for details. Cannot proceed with sync.');
+            return;
+        }
+        
+        logger.info('✅ Google Photos API test passed, proceeding with sync');
         await interaction.editReply(`🔄 Syncing ${filterDescription}...`);
 
         // STEP 1: Collect all messages first
@@ -123,11 +134,7 @@ export async function syncCommand(interaction: ChatInputCommandInteraction, guil
         await interaction.editReply(`🔄 Uploading images...`);
 
         // STEP 3: Get or create folder
-        const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-        const channelFolderId = await googleDriveService.findOrCreateFolder(
-            channel.name,
-            rootFolderId || undefined
-        );
+        const albumId = await googlePhotosService.findOrCreateAlbum(channel.name);
 
         // STEP 4: Collect all images to upload
         interface ImageTask {
@@ -163,61 +170,49 @@ export async function syncCommand(interaction: ChatInputCommandInteraction, guil
 
         logger.info(`Found ${totalImages} images to upload`);
         
-        // STEP 5: Process images with concurrency
-        const CONCURRENCY = 3; // Upload 3 images at once
+        // STEP 5: Process images ONE AT A TIME (Google Photos has strict rate limits)
+        const DELAY_BETWEEN_UPLOADS = 0; // 2 seconds between uploads
         
-        for (let i = 0; i < imageTasks.length; i += CONCURRENCY) {
-            const batch = imageTasks.slice(i, i + CONCURRENCY);
+        for (let i = 0; i < imageTasks.length; i++) {
+            const task = imageTasks[i];
+            const { message, imageUrl, imageIndex } = task;
             
-            // Process batch concurrently
-            const results = await Promise.allSettled(
-                batch.map(async (task) => {
-                    const { message, imageUrl, imageIndex } = task;
-                    
-                    try {
-                        logger.debug(`Downloading image from message ${message.id}`);
-                        const imageBuffer = await downloadImage(imageUrl);
-                        const fileName = getFileNameFromUrl(imageUrl, message.id, imageIndex);
-                        const mimeType = getMimeTypeFromUrl(imageUrl);
-                        
-                        logger.debug(`Uploading ${fileName} to Google Drive`);
-                        await googleDriveService.uploadImage(
-                            imageBuffer,
-                            fileName,
-                            channelFolderId,
-                            mimeType
-                        );
-                        
-                        return { success: true, messageId: message.id };
-                    } catch (error) {
-                        logger.error(`Failed to upload image from message ${message.id}`, error);
-                        return { success: false, messageId: message.id };
-                    }
-                })
-            );
-            
-            // Count results
-            results.forEach((result) => {
-                if (result.status === 'fulfilled' && result.value.success) {
-                    uploadedImages++;
-                } else {
-                    failedImages++;
+            try {
+                logger.debug(`Downloading image from message ${message.id} (${i + 1}/${totalImages})`);
+                const imageBuffer = await downloadImage(imageUrl);
+                const fileName = getFileNameFromUrl(imageUrl, message.id, imageIndex);
+                const mimeType = getMimeTypeFromUrl(imageUrl);
+                
+                logger.debug(`Uploading ${fileName} to Google Photos`);
+                await googlePhotosService.uploadImage(
+                    imageBuffer,
+                    fileName,
+                    albumId,
+                    mimeType
+                );
+                
+                uploadedImages++;
+                markMessageSynced(channel.id, message.id);
+                
+                // Update progress every 5 images or on last image
+                if (uploadedImages % 5 === 0 || i === imageTasks.length - 1) {
+                    await interaction.editReply(
+                        `🔄 Syncing...\n` +
+                        `📊 ${uploadedImages + failedImages}/${totalImages} images\n` +
+                        `✅ ${uploadedImages} uploaded` +
+                        (failedImages > 0 ? ` | ❌ ${failedImages} failed` : '')
+                    );
                 }
-            });
-            
-            // Mark messages as synced (after processing all their images)
-            const processedMessageIds = new Set(batch.map(t => t.message.id));
-            processedMessageIds.forEach(msgId => {
-                markMessageSynced(channel.id, msgId);
-            });
-            
-            // Update progress
-            await interaction.editReply(
-                `🔄 Syncing...\n` +
-                `📊 ${uploadedImages + failedImages}/${totalImages} images\n` +
-                `✅ ${uploadedImages} uploaded` +
-                (failedImages > 0 ? ` | ❌ ${failedImages} failed` : '')
-            );
+                
+                // Add delay between uploads to avoid rate limiting
+                if (i < imageTasks.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_UPLOADS));
+                }
+                
+            } catch (error) {
+                logger.error(`Failed to upload image from message ${message.id}`, error);
+                failedImages++;
+            }
         }
 
         // Save synced messages
