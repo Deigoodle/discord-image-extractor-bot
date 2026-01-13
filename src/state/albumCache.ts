@@ -42,3 +42,9 @@ export function setAlbumId(channelName: string, albumId: string) {
   albumCache.set(channelName, albumId);
   saveAlbumCache();
 }
+
+export function clearAlbumId(channelName: string) {
+  albumCache.delete(channelName);
+  saveAlbumCache();
+  logger.info(`Cleared cached album ID for: ${channelName}`);
+}

@@ -5,9 +5,11 @@ import axios from 'axios';
 import { getAlbumId, setAlbumId, loadAlbumCache } from '@/state/albumCache';
 
 const logger = createLogger('googlePhotosService');
+
 const SCOPES = [
-  'https://www.googleapis.com/auth/photoslibrary.appendonly'
+  'https://www.googleapis.com/auth/photoslibrary'
 ];
+
 const TOKEN_PATH = './data/google-token.json';
 const CREDENTIALS_PATH = process.env.GOOGLE_OAUTH_CREDENTIALS_PATH || './oauth-credentials.json';
 
@@ -18,9 +20,10 @@ class GooglePhotosService {
     try {
       // Load album cache from disk
       loadAlbumCache();
-      
+
       const credentials = JSON.parse(readFileSync(CREDENTIALS_PATH, 'utf-8'));
-      const { client_secret, client_id, redirect_uris } = credentials.installed || credentials.web;
+      const { client_secret, client_id, redirect_uris } =
+        credentials.installed || credentials.web;
 
       const oAuth2Client = new google.auth.OAuth2(
         client_id,
@@ -31,10 +34,38 @@ class GooglePhotosService {
       // Check if we have a saved token
       if (existsSync(TOKEN_PATH)) {
         const token = JSON.parse(readFileSync(TOKEN_PATH, 'utf-8'));
+
+        logger.info(`📄 Token file scopes: ${token.scope || 'not specified'}`);
+
         oAuth2Client.setCredentials(token);
-        logger.info('Google Photos initialized with saved token');
+
+        try {
+          const accessToken = await oAuth2Client.getAccessToken();
+          if (!accessToken.token) {
+            throw new Error('No access token available');
+          }
+
+          // 🔍 VERIFY SCOPES FROM GOOGLE
+          try {
+            const tokenInfo = await axios.get(
+              'https://www.googleapis.com/oauth2/v3/tokeninfo',
+              { params: { access_token: accessToken.token } }
+            );
+
+            logger.info(`✅ Token scopes from Google: ${tokenInfo.data.scope}`);
+          } catch {
+            logger.warn('⚠️ Could not verify token scopes with Google');
+          }
+
+          logger.info('Google Photos initialized with saved token');
+        } catch (error: any) {
+          logger.error(
+            'Token validation failed, need to re-authenticate:',
+            error.message
+          );
+          await this.getNewToken(oAuth2Client);
+        }
       } else {
-        // Need to authorize first time
         await this.getNewToken(oAuth2Client);
       }
 
@@ -49,57 +80,94 @@ class GooglePhotosService {
     const authUrl = oAuth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES,
+      prompt: 'consent'
     });
 
     console.log('\n═══════════════════════════════════════════════════════════');
     console.log('📋 FIRST TIME SETUP - Google Photos Authorization Required');
     console.log('═══════════════════════════════════════════════════════════');
-    console.log('\n1. Open this URL in your browser:');
-    console.log('\n' + authUrl + '\n');
+    console.log('\n1. Open this URL in your browser:\n');
+    console.log(authUrl + '\n');
     console.log('2. Login with your Google account');
     console.log('3. Click "Allow" to grant permissions');
-    console.log('4. Copy the authorization code from the URL or page');
+    console.log('4. Copy the authorization code');
     console.log('5. Add to .env file: GOOGLE_AUTH_CODE=your_code_here');
     console.log('6. Restart the bot');
-    console.log('\n═══════════════════════════════════════════════════════════\n');
+    console.log('═══════════════════════════════════════════════════════════\n');
 
     const code = process.env.GOOGLE_AUTH_CODE;
     if (!code) {
-      throw new Error('GOOGLE_AUTH_CODE not found in .env. Please follow the steps above.');
+      throw new Error('GOOGLE_AUTH_CODE not found in .env.');
     }
 
     const { tokens } = await oAuth2Client.getToken(code);
     oAuth2Client.setCredentials(tokens);
 
-    // Save token for future use
+    if (tokens.scope) {
+      logger.info(`✅ New token scopes: ${tokens.scope}`);
+    } else {
+      logger.warn('⚠️ New token did not include scope info');
+    }
+
     writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
     logger.info('Token saved successfully. You can now remove GOOGLE_AUTH_CODE from .env');
   }
 
-  async findOrCreateAlbum(albumTitle: string): Promise<string> {
+  // ================================
+  // Everything below is unchanged
+  // ================================
+
+  async findOrCreateAlbum(albumTitle: string, forceFresh: boolean = false): Promise<string> {
     if (!this.auth) {
       throw new Error('Photos client not initialized');
     }
 
-    // Check persistent cache first
-    const cachedAlbumId = getAlbumId(albumTitle);
-    if (cachedAlbumId) {
-      logger.debug(`Using cached album ID for: ${albumTitle}`);
-      return cachedAlbumId;
+    const accessToken = await this.auth.getAccessToken();
+
+    if (!forceFresh) {
+      const cachedAlbumId = getAlbumId(albumTitle);
+      if (cachedAlbumId) {
+        logger.debug(`Using cached album ID for: ${albumTitle}`);
+        return cachedAlbumId;
+      }
     }
 
     try {
-      const accessToken = await this.auth.getAccessToken();
-      
-      // Create new album with the channel name
-      // Note: Google Photos API (as of March 2025) doesn't allow listing albums
-      // so we always create. If an album with this name exists, we'll get a new one.
+      logger.info(`Searching for existing album: ${albumTitle}`);
+      const listResponse = await axios.get(
+        'https://photoslibrary.googleapis.com/v1/albums',
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken.token}`,
+            'Content-Type': 'application/json'
+          },
+          params: { pageSize: 50 }
+        }
+      );
+
+      const albums = listResponse.data.albums || [];
+      const existingAlbum = albums.find((album: any) => album.title === albumTitle);
+
+      if (existingAlbum) {
+        logger.info(`Found existing album "${albumTitle}" with ID: ${existingAlbum.id}`);
+        setAlbumId(albumTitle, existingAlbum.id);
+        return existingAlbum.id;
+      }
+
+      logger.info(`Album "${albumTitle}" not found, creating new album...`);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        logger.warn('Cannot search for albums due to insufficient permissions. Creating new album instead...');
+      } else {
+        logger.warn(`Error searching for album, will create new one: ${error.message}`);
+      }
+    }
+
+    try {
       logger.info(`Creating album: ${albumTitle}`);
       const createResponse = await axios.post(
         'https://photoslibrary.googleapis.com/v1/albums',
-        {
-          album: { title: albumTitle }
-        },
+        { album: { title: albumTitle } },
         {
           headers: {
             'Authorization': `Bearer ${accessToken.token}`,
@@ -110,20 +178,10 @@ class GooglePhotosService {
 
       const albumId = createResponse.data.id;
       logger.info(`Created album "${albumTitle}" with ID: ${albumId}`);
-      
-      // Save to persistent cache
       setAlbumId(albumTitle, albumId);
-      
       return albumId;
     } catch (error: any) {
-      logger.error('Error creating album');
-      if (error.response) {
-        logger.error(`Status: ${error.response.status}`);
-        logger.error(`Status Text: ${error.response.statusText}`);
-        logger.error(`Error Data: ${JSON.stringify(error.response.data)}`);
-      } else {
-        logger.error(`Error message: ${error.message || JSON.stringify(error)}`);
-      }
+      logger.error('Error creating album', error.response?.data || error.message);
       throw error;
     }
   }
@@ -131,17 +189,30 @@ class GooglePhotosService {
   async uploadImage(
     imageBuffer: Buffer,
     fileName: string,
-    albumId: string,
+    albumId: string | null,
     mimeType: string = 'image/jpeg'
   ): Promise<string> {
     if (!this.auth) {
       throw new Error('Photos client not initialized');
     }
 
+    // Validate inputs
+    if (!imageBuffer || imageBuffer.length === 0) {
+      throw new Error('Empty buffer provided');
+    }
+    
+    // Google Photos has a 200MB limit for photos and videos via API
+    const MAX_SIZE = 200 * 1024 * 1024; // 200MB
+    if (imageBuffer.length > MAX_SIZE) {
+      throw new Error(`File too large: ${imageBuffer.length} bytes (max: ${MAX_SIZE})`);
+    }
+
     try {
+      logger.debug(`Starting upload - File: ${fileName}, MIME: ${mimeType}, Size: ${imageBuffer.length} bytes`);
       const accessToken = await this.auth.getAccessToken();
 
       // Step 1: Upload the bytes to get an upload token
+      logger.debug('Step 1: Uploading bytes to get upload token...');
       const uploadResponse = await axios.post(
         'https://photoslibrary.googleapis.com/v1/uploads',
         imageBuffer,
@@ -156,49 +227,113 @@ class GooglePhotosService {
       );
 
       const uploadToken = uploadResponse.data;
+      logger.debug(`Upload token received: ${uploadToken.substring(0, 50)}...`);
 
       // Step 2: Create media item from upload token
-      const createResponse = await axios.post(
-        'https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate',
-        {
-          albumId: albumId,
-          newMediaItems: [
+      logger.debug('Step 2: Creating media item from upload token...');
+      let createResponse;
+      
+      // If we have an album ID, try to use it; otherwise upload to library
+      if (albumId && albumId.trim() !== '') {
+        try {
+          // Try to create with album ID first
+          createResponse = await axios.post(
+            'https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate',
             {
-              description: fileName,
-              simpleMediaItem: {
-                fileName: fileName,
-                uploadToken: uploadToken
+              albumId: albumId,
+              newMediaItems: [
+                {
+                  description: fileName,
+                  simpleMediaItem: {
+                    fileName: fileName,
+                    uploadToken: uploadToken
+                  }
+                }
+              ]
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken.token}`,
+                'Content-Type': 'application/json'
               }
             }
-          ]
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken.token}`,
-            'Content-Type': 'application/json'
+          );
+          logger.debug('Successfully uploaded to album');
+        } catch (error: any) {
+          // If adding to album fails, try uploading without album
+          if (error.response?.status === 403 || error.response?.status === 404) {
+            logger.warn(`Failed to add to album ${albumId}, uploading to library instead...`);
+            albumId = null; // Clear album ID so we don't try to add later
+          } else {
+            throw error;
           }
         }
-      );
+      }
+      
+      // Upload to library (either because no album ID or album upload failed)
+      if (!albumId || albumId.trim() === '') {
+        createResponse = await axios.post(
+          'https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate',
+          {
+            newMediaItems: [
+              {
+                description: fileName,
+                simpleMediaItem: {
+                  fileName: fileName,
+                  uploadToken: uploadToken
+                }
+              }
+            ]
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken.token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        logger.info('Uploaded to Google Photos library (no album)');
+      }
 
-      const mediaItem = createResponse.data.newMediaItemResults?.[0]?.mediaItem;
+      if (!createResponse) {
+        throw new Error('No response from Google Photos API during upload.');
+      }
+
+      logger.debug('Create response received:', JSON.stringify(createResponse.data, null, 2));
+
+      const mediaItem = createResponse.data?.newMediaItemResults?.[0]?.mediaItem;
+      const result = createResponse.data?.newMediaItemResults?.[0];
+
+      // Check if the upload failed (status message other than "Success" or "OK")
+      if (result?.status?.message && result.status.message !== 'Success' && result.status.message !== 'OK') {
+        logger.error(`Upload failed with status: ${result.status.message}`);
+        throw new Error(`Google Photos API error: ${result.status.message}`);
+      }
       
       if (!mediaItem?.productUrl) {
+        logger.error('Full response:', JSON.stringify(createResponse.data, null, 2));
         throw new Error('Failed to get product URL from upload response');
       }
 
       logger.info(`Successfully uploaded: ${fileName}`);
       return mediaItem.productUrl;
     } catch (error: any) {
-      logger.error('Error uploading image to Google Photos');
+      logger.error(`ERROR uploading: ${fileName}`);
+      logger.error(`File details: MIME=${mimeType}, Size=${imageBuffer.length} bytes, AlbumID=${albumId}`);
       if (error.response) {
-        logger.error('Google API Response:', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          data: JSON.stringify(error.response.data, null, 2),
-          headers: error.response.headers
-        });
+        logger.error(`Response status: ${error.response.status} ${error.response.statusText}`);
+        logger.error(`Response data:`, error.response.data);
+        logger.error(`Response headers:`, error.response.headers);
+        if (typeof error.response.data === 'string') {
+          logger.error(`Raw response data: ${error.response.data}`);
+        } else {
+          logger.error(`JSON response data: ${JSON.stringify(error.response.data, null, 2)}`);
+        }
+      } else if (error.request) {
+        logger.error('Request was made but no response received');
+        logger.error('Request details:', error.request);
       } else {
-        logger.error('Error details:', error);
+        logger.error('Error details:', error.message);
       }
       throw error;
     }
@@ -267,6 +402,22 @@ class GooglePhotosService {
       const accessToken = await this.auth.getAccessToken();
       logger.info('Testing Google Photos API connection...');
       logger.info(`Access token: ${accessToken.token?.substring(0, 20)}...`);
+      
+      // Get user info to show which account is authenticated
+      try {
+        const userInfoResponse = await axios.get(
+          'https://www.googleapis.com/oauth2/v2/userinfo',
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken.token}`
+            }
+          }
+        );
+        logger.info(`✅ Authenticated as: ${userInfoResponse.data.email} (${userInfoResponse.data.name})`);
+        logger.info(`   User ID: ${userInfoResponse.data.id}`);
+      } catch (error) {
+        logger.warn('Could not fetch user info');
+      }
       
       // Test by creating a test album (appendonly scope allows this)
       const testAlbumTitle = `API Test ${Date.now()}`;

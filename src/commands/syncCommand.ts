@@ -131,19 +131,19 @@ export async function syncCommand(interaction: ChatInputCommandInteraction, guil
         allMessages.reverse();
 
         logger.info(`Processing ${allMessages.length} messages`);
-        await interaction.editReply(`🔄 Uploading images...`);
+        await interaction.editReply(`🔄 Uploading media...`);
 
         // STEP 3: Get or create folder
-        const albumId = await googlePhotosService.findOrCreateAlbum(channel.name);
+        let albumId = await googlePhotosService.findOrCreateAlbum(channel.name);
 
-        // STEP 4: Collect all images to upload
-        interface ImageTask {
+        // STEP 4: Collect all media to upload (images and videos)
+        interface MediaTask {
             message: Message;
-            imageUrl: string;
-            imageIndex: number;
+            mediaUrl: string;
+            mediaIndex: number;
         }
 
-        const imageTasks: ImageTask[] = [];
+        const mediaTasks: MediaTask[] = [];
         
         for (const message of allMessages) {
             if (message.author.bot) continue;
@@ -153,78 +153,96 @@ export async function syncCommand(interaction: ChatInputCommandInteraction, guil
                 continue;
             }
 
-            const images = extractImages(message);
+            const media = extractImages(message);
             
-            for (let i = 0; i < images.length; i++) {
-                imageTasks.push({
+            for (let i = 0; i < media.length; i++) {
+                mediaTasks.push({
                     message,
-                    imageUrl: images[i],
-                    imageIndex: i,
+                    mediaUrl: media[i],
+                    mediaIndex: i,
                 });
             }
         }
 
-        const totalImages = imageTasks.length;
-        let uploadedImages = 0;
-        let failedImages = 0;
+        const totalMedia = mediaTasks.length;
+        let uploadedMedia = 0;
+        let failedMedia = 0;
 
-        logger.info(`Found ${totalImages} images to upload`);
+        logger.info(`Found ${totalMedia} media files to upload`);
         
-        // STEP 5: Process images ONE AT A TIME (Google Photos has strict rate limits)
+        // STEP 5: Process media ONE AT A TIME (Google Photos has strict rate limits)
         const DELAY_BETWEEN_UPLOADS = 0; // 2 seconds between uploads
         
-        for (let i = 0; i < imageTasks.length; i++) {
-            const task = imageTasks[i];
-            const { message, imageUrl, imageIndex } = task;
+        for (let i = 0; i < mediaTasks.length; i++) {
+            const task = mediaTasks[i];
+            const { message, mediaUrl, mediaIndex } = task;
             
             try {
-                logger.debug(`Downloading image from message ${message.id} (${i + 1}/${totalImages})`);
-                const imageBuffer = await downloadImage(imageUrl);
-                const fileName = getFileNameFromUrl(imageUrl, message.id, imageIndex);
-                const mimeType = getMimeTypeFromUrl(imageUrl);
+                logger.debug(`Downloading media from message ${message.id} (${i + 1}/${totalMedia})`);
+                const mediaBuffer = await downloadImage(mediaUrl);
+                const fileName = getFileNameFromUrl(mediaUrl, message.id, mediaIndex);
+                const mimeType = getMimeTypeFromUrl(mediaUrl);
                 
-                logger.debug(`Uploading ${fileName} to Google Photos`);
-                await googlePhotosService.uploadImage(
-                    imageBuffer,
-                    fileName,
-                    albumId,
-                    mimeType
-                );
+                try {
+                    logger.debug(`Uploading ${fileName} to Google Photos`);
+                    await googlePhotosService.uploadImage(
+                        mediaBuffer,
+                        fileName,
+                        albumId,
+                        mimeType
+                    );
+                } catch (uploadError: any) {
+                    // Check if error is due to invalid album ID
+                    if (uploadError.response?.data?.error?.message?.includes('Invalid album ID')) {
+                        logger.warn(`Invalid album ID detected, creating fresh album and retrying...`);
+                        // Get a fresh album ID and retry
+                        albumId = await googlePhotosService.findOrCreateAlbum(channel.name, true);
+                        logger.info(`Retrying upload with new album ID: ${albumId}`);
+                        await googlePhotosService.uploadImage(
+                            mediaBuffer,
+                            fileName,
+                            albumId,
+                            mimeType
+                        );
+                    } else {
+                        throw uploadError;
+                    }
+                }
                 
-                uploadedImages++;
+                uploadedMedia++;
                 markMessageSynced(channel.id, message.id);
                 
-                // Update progress every 5 images or on last image
-                if (uploadedImages % 5 === 0 || i === imageTasks.length - 1) {
+                // Update progress every 5 media files or on last media
+                if (uploadedMedia % 5 === 0 || i === mediaTasks.length - 1) {
                     await interaction.editReply(
                         `🔄 Syncing...\n` +
-                        `📊 ${uploadedImages + failedImages}/${totalImages} images\n` +
-                        `✅ ${uploadedImages} uploaded` +
-                        (failedImages > 0 ? ` | ❌ ${failedImages} failed` : '')
+                        `📊 ${uploadedMedia + failedMedia}/${totalMedia} files\n` +
+                        `✅ ${uploadedMedia} uploaded` +
+                        (failedMedia > 0 ? ` | ❌ ${failedMedia} failed` : '')
                     );
                 }
                 
                 // Add delay between uploads to avoid rate limiting
-                if (i < imageTasks.length - 1) {
+                if (i < mediaTasks.length - 1) {
                     await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_UPLOADS));
                 }
                 
             } catch (error) {
-                logger.error(`Failed to upload image from message ${message.id}`, error);
-                failedImages++;
+                logger.error(`Failed to upload media from message ${message.id}`, error);
+                failedMedia++;
             }
         }
 
         // Save synced messages
         saveSyncedMessages();
 
-        logger.info(`Sync complete: ${uploadedImages}/${totalImages} uploaded, ${failedImages} failed`);
+        logger.info(`Sync complete: ${uploadedMedia}/${totalMedia} uploaded, ${failedMedia} failed`);
 
         const summary =
             `✅ Sync complete!\n` +
-            `🖼️ ${totalImages} images found\n` +
-            `☁️ ${uploadedImages} uploaded` +
-            (failedImages > 0 ? `\n⚠️ ${failedImages} failed` : '');
+            `🖼️ ${totalMedia} media files found\n` +
+            `☁️ ${uploadedMedia} uploaded` +
+            (failedMedia > 0 ? `\n⚠️ ${failedMedia} failed` : '');
 
         await interaction.editReply(summary);
 

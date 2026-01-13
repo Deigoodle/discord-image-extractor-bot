@@ -1,22 +1,28 @@
 import { Message } from "discord.js";
 
 export function extractImages(message: Message): string[] {
-  const images: string[] = [];
+  const media: string[] = [];
 
   message.attachments.forEach((attachment) => {
-    if (attachment.contentType?.startsWith('image/')) {
-      images.push(attachment.url);
+    // Extract both images and videos
+    if (attachment.contentType?.startsWith('image/') || 
+        attachment.contentType?.startsWith('video/')) {
+      media.push(attachment.url);
     }
   });
 
   message.embeds.forEach((embed) => {
     if (embed.image?.url) {
-      images.push(embed.image.url);
+      media.push(embed.image.url);
     }
     if (embed.thumbnail?.url) {
-      images.push(embed.thumbnail.url);
+      media.push(embed.thumbnail.url);
+    }
+    // Also extract video embeds
+    if (embed.video?.url) {
+      media.push(embed.video.url);
     }
   });
 
-  return images;
+  return media;
 }

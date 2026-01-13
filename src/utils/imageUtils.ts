@@ -30,12 +30,24 @@ export function getMimeTypeFromUrl(url: string): string {
     const extension = path.extname(urlObj.pathname).toLowerCase();
     
     const mimeTypes: Record<string, string> = {
+      // Images
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
       '.png': 'image/png',
       '.gif': 'image/gif',
       '.webp': 'image/webp',
       '.bmp': 'image/bmp',
+      // Videos
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.mkv': 'video/x-matroska',
+      '.webm': 'video/webm',
+      '.flv': 'video/x-flv',
+      '.wmv': 'video/x-ms-wmv',
+      '.m4v': 'video/x-m4v',
+      '.mpg': 'video/mpeg',
+      '.mpeg': 'video/mpeg',
     };
     
     return mimeTypes[extension] || 'image/jpeg';
